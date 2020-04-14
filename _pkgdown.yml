@@ -1,4 +1,4 @@
-url: https://r-lib.github.io/ghactions/
+url: https://www.maxheld.de/ghactions/
 authors:
   Max Held:
     href: http://www.maxheld.de
@@ -12,49 +12,41 @@ development:
 reference:
   - title: "Setup"
     desc: >
-      Functions to help you get started with GitHub actions.
+      Functions to help you get started with GitHub Actions.
     contents:
       - has_concept("setup")
       - edit_workflow
+  - title: "I/O"
+    desc: >
+      Reading and writing GitHub Actions from/to `*.yml`s.
+    contents:
+      - has_concept("io")
   - title: "Workflows"
     desc: >
-      Functions with GitHub actions workflows for common R projects with sensible defaults.
+      Functions with GitHub Actions workflows for common R projects with sensible defaults.
     contents:
       - has_concept("workflows")
-  - title: "Actions"
+  - title: "Steps"
     desc: >
-      Functions to (thinly) wrap relevant GitHub actions.
-      This includes GitHub actions from outside sources.
+      Functions to write steps.
+      This includes wrappers for external GitHub actions.
     contents:
-      - has_concept("actions")
+      - has_concept("steps")
   - title: "Syntax"
     desc: >
       Functions to generate *blocks* of GitHub actions syntax.
       For internal purposes, not recommended for package users.
     contents:
       - has_concept("syntax")
+  - title: "Helpers"
+    desc: >
+      Helper functions.
+    contents:
+      - has_concept("helpers")
 articles:
   - title: "Overview"
     contents:
       - ghactions
-      - isolation
-  - title: "Actions for Package Development"
-    desc: >
-      These actions are useful in package development.
-    contents:
-      - pkg-dev/ci
-      - pkg-dev/auto-commit
-      - pkg-dev/review
-  - title: "Other Actions"
-    contents:
-      - rscript-byod
-  - title: "Developing GitHub Actions"
-    desc: >
-      Not specific to R or this package.
-    contents:
-      - performance
-      - local
-      - testing
 navbar:
   title: "ghactions"
   left:
@@ -64,13 +56,9 @@ navbar:
       href: "articles/ghactions.html"
     - text: "Reference"
       href: "reference/index.html"
-    - text: "Articles"
-      href: "articles/index.html"
-    - text: "Presentation"
-      href: "pres/index.html"
   right:
     - icon: fa-github
-      href: https://github.com/maxheld83/ghactions
+      href: https://github.com/r-lib/ghactions
 theme: cosmo
 template:
   params:

@@ -6,7 +6,7 @@
 \alias{ghactions-package}
 \title{ghactions: GitHub actions for R}
 \description{
-Provides GitHub actions and some R functions to create workflows.
+Provides templating functions with sensible defaults to use GitHub Actions for R projects.
 }
 \seealso{
 Useful links:
@@ -17,11 +17,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Max Held \email{info@maxheld.de} (0000-0002-4703-5388)
+\strong{Maintainer}: Max Held \email{info@maxheld.de} (\href{https://orcid.org/0000-0002-4703-5388}{ORCID})
 
 Authors:
 \itemize{
-  \item Jim Hester \email{james.f.hester@gmail.com} (0000-0002-2739-7082)
+  \item Jim Hester \email{james.f.hester@gmail.com} (\href{https://orcid.org/0000-0002-2739-7082}{ORCID})
 }
 
 Other contributors:

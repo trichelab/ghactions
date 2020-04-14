@@ -1,71 +1,116 @@
 # Workflows ====
-#' Create GitHub Actions syntax for *one workflow*.
+#' Create nested list for a [workflow block](https://help.github.com/en/articles/workflow-syntax-for-github-actions)
 #'
-#' @param IDENTIFIER `[character(1)]`
-#' giving the name of the workflow block.
+#' @param name `[character(1)]`
+#' giving the [name](https://help.github.com/en/articles/workflow-syntax-for-github-actions#name) of the workflow.
+#' Defaults to `NULL`, for no name, in which case GitHub will use the file name.
 #'
-#' @param on `[character(1)]`
-#' giving the [GitHub Event](https://developer.github.com/webhooks/#events) on which to trigger the workflow.
-#' Must be one of [ghactions_events].
+#' @param on `[character()]`
+#' giving the [GitHub Event](https://help.github.com/en/articles/events-that-trigger-workflows) on which to trigger the workflow.
+#' Must be a subset of [ghactions_events].
 #' Defaults to `"push"`, in which case the workflow is triggered on every push event.
+#' Can also be a named list as returned by [on()] for additional filters.
 #'
-#' @param resolves `[character()]`
-#' giving the action(s) to resolve
+#' @param jobs `[list()]`
+#' giving a *named* list of jobs, with each list element as returned by [job()].
 #'
 #' @examples
 #' workflow(
-#'   IDENTIFIER = "Run calculation",
+#'   name = "Render",
 #'   on = "push",
-#'   resolves = "Simple Addition"
+#'   jobs = NULL
 #' )
 #'
-#' @return `[list()]`
-#' A list as specified in the `workflow` argument to [use_ghactions()].
-#'
-#' @family syntax workflows
+#' @family syntax
 #'
 #' @export
-workflow <- function(IDENTIFIER, on = "push", resolves) {
-  checkmate::assert_string(
-    x = IDENTIFIER,
-    null.ok = FALSE
-  )
-  rlang::arg_match(arg = on, values = ghactions_events)
-  checkmate::assert_character(
-    x = resolves,
+workflow <- function(name = NULL, on = "push", jobs = NULL) {
+  checkmate::assert_string(x = name, null.ok = TRUE, na.ok = FALSE)
+  if (is.character(on)) {
+    checkmate::assert_subset(
+      x = on,
+      choices = ghactions_events,
+      empty.ok = FALSE
+    )
+  } else {
+    checkmate::assert_list(
+      x = on,
+      any.missing = FALSE,
+      names = "named"
+    )
+  }
+  checkmate::assert_list(
+    x = jobs,
     any.missing = FALSE,
-    unique = TRUE,  # cannot have two identical dependencies
-    null.ok = TRUE
+    null.ok = TRUE,
+    names = "unique"
   )
 
-  list(
-    IDENTIFIER = IDENTIFIER,
-    on = on,
-    resolves = resolves,
-    template = "workflow"
-  )
+  purrr::compact(as.list(environment()))
 }
 
 
-#' @describeIn workflow Convert workflow block to HCL
+#' Create nested list for an `on:` field
 #'
-#' @inherit make_template
+#' @param event `[character(1)]`
+#' giving the event on which to filter.
+#' Must be *one* of `c("push", "pull_request", "schedule")`.
+#'
+#' @param ... `[character()]`
+#' giving the filters on which to run.
+#' Must correspond to the filters allowed by `event`.
+#'
+#' @details
+#' See the [GitHub Actions workflow syntax](https://help.github.com/en/articles/workflow-syntax-for-github-actions) for details.
 #'
 #' @export
-workflow2hcl <- function(l) {
-  make_template(
-    list(
-      IDENTIFIER = l$IDENTIFIER,
-      on = l$on,
-      resolves = toTOML(l$resolves)
-    ),
-    template = "workflow"
+#'
+#' @family syntax
+#'
+#' @examples
+#' on(
+#'   event = "push",
+#'   branches = c("master", "releases/*")
+#' )
+on <- function(event, ...) {
+  checkmate::assert_choice(
+    x = event,
+    choices = c("push", "pull_request", "schedule")
   )
+  rlang::set_names(x = list(purrr::compact(list(...))), nm = event)
 }
 
-#' @title Supported events to trigger GitHub actions
+#' @describeIn on filter on push event
 #'
-#' @description
+#' @param tags,branches,paths `[character()]`
+#' giving the [tags, branches](https://help.github.com/en/articles/workflow-syntax-for-github-actions#onpushpull_requesttagsbranches) or [modified paths](https://help.github.com/en/articles/workflow-syntax-for-github-actions#onpushpull_requestpaths) on which to run the workflow.
+#' Defaults to `NULL` for no additional filters.
+#'
+#' @export
+on_push <- function(tags = NULL, branches = NULL, paths = NULL) {
+  on(event = "push", tags = tags, branches = branches, paths = paths)
+}
+
+#' @describeIn on filter on pull request
+#'
+#' @export
+on_pull_request <- function(tags = NULL, branches = NULL, paths = NULL) {
+  on(event = "pull_request", tags = tags, branches = branches, paths = paths)
+}
+
+#' @describeIn on filter on schedule
+#'
+#' @param cron `[character(1)]`
+#' giving UTC times using [POSIX cron syntax](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/crontab.html#tag_20_25_07).
+#'
+#' @export
+on_schedule <- function(cron = NULL) {
+  on(event = "schedule", cron = cron)
+}
+
+
+#' Supported events to trigger GitHub actions
+#'
 #' You can trigger GitHub actions from these events.
 #' List is taken from [official spec](https://developer.github.com/actions/creating-workflows/workflow-configuration-options/#events-supported-in-workflow-files).
 #'
@@ -101,285 +146,311 @@ ghactions_events <- c(
   "push",
   "repository_dispatch",
   "release",
+  "schedule",
   "status",
   "watch"
 )
 
 
-# Actions ====
+# Jobs ====
 
-#' Create GitHub Actions syntax for *one action*
+#' Create nested list for *one* [job](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobs)
 #'
-#' Thin wrapper around GitHub actions.
-#'
-#' @param IDENTIFIER `[character(1)]`
-#' Giving the name of the action.
-#'
-#' Used:
-#' - as an informative label on GitHub.com,
-#' - in the `needs` fields of other *action blocks* to model the workflow graph,
-#' - in the `resolves` fields of other *workflow blocks* to model the workflow graph.
+#' @param id,name `[character(1)]`
+#' giving additional options for the job.
+#' Defaults to `NULL`.
 #'
 #' @param needs `[character()]`
-#' giving the actions (by their `IDENTIFIER`s) that must complete successfully before this action will be invoked.
-#' Defaults to `NULL` for no upstream dependencies.
+#' giving the jobs that must complete successfully before this job is run.
+#' Defaults to `NULL` for no dependencies.
 #'
-#' @param uses `[character(1)]`
-#' giving the Docker image that will run the action.
+#' @param runs-on `[character(1)]`
+#' giving the type of virtual host machine to run the job on.
+#' Defaults to `"ubuntu-18.04"`.
+#' Must be one of [ghactions_vms].
 #'
-#' @param runs `[character()]`
-#' giving the command to run in the docker image.
-#' Overrides the `Dockerfile` `ENTRYPOINT`.
-#' Defaults to `NULL` for the default `ENTRYPOINT` (recommended).
+#' @param steps `[list()]`
+#' giving an *unnamed* list of steps, with each element as returned by [step()].
+#' Defaults to `NULL`.
 #'
-#' @param args `[character()]`
-#' giving the arguments to pass to the action.
-#' Arguments get appended to the last command in `ENTRYPOINT`.
-#' Defaults to `NULL` for no arguments.
+#' @param timeout_minutes `[integer(1)]`
+#' giving the maximum number of minutes to let a workflow run before GitHub automatically cancels it.
+#' Defaults to `NULL`.
 #'
-#' @param env `[list(character(1)]`
-#' giving the environment variables to set in the action's runtime environment.
-#' Defaults to `NULL` for no environment variables (in addition to the defaults set by GitHub Actions).
+#' @param strategy `[list()]`
+#' giving a named list as returned by [strategy()].
+#' Defaults to `NULL`.
 #'
-#' @param secrets `[character()]`
-#' giving the *names* of the secret variables to set in the runtime enviornment, which the action can access as an environment variable.
-#' The *values* of secrets must be set in your repository's "Settings" tab.
-#' **Do not store secrets in your repository.**
-#' GitHub advises against using GitHub actions for production secrets during the public beta period.
-#' Defaults to `NULL` for no secrets.
+#' @param container `[character(1)]`/`[list()]`
+#' giving a published container image.
+#' For advanced options, use [container()].
+#' Defaults to `NULL`.
 #'
-#' @details
-#' For details on the syntax and arguments, see [here](https://developer.github.com/actions/creating-workflows/workflow-configuration-options/)
+#' @param services `[list()]`
+#' giving additional containers to host services for a job in a workflow in a *named* list.
+#' Use [container()] to construct the list elements.
+#' Defaults to `NULL`.
 #'
-#' These functions are for **advanced users** knowledgeable about GitHub actions.
-#' Novice users may be better served by the complete templates in workflows.
-#'
-#' These functions provide very thin wrappers around existing GitHub actions, including actions from other repositories.
-#' Essentially, they just create lists ready to be ingested by [action2hcl()], which then turns these R lists into valid GitHub actions syntax blocks.
-#'
-#' For documentation on these actions, consult their respective `README.md`s linked in the below.
-#' Some variants of these action wrappers include sensible defaults for frequent uses in R.
-#'
-#' The `uses` field is *always* hardcoded to a particular commit or tag of the underlying github action to ensure compatibility.
-#'
-#' To render an action block completely from scratch, you can always use the templating function [action()].
-#'
-#' @examples
-#' # many R projects will need this block to first build an image from a DOCKERFILE
-#' l <- action(
-#'   IDENTIFIER = "Add two numbers",
-#'   uses = "rocker/r-ver:3.6.1",
-#'   args = "Rscript -e '1+1'"
-#' )
-#' action2hcl(l = l)
-#'
-#' @return `[list()]` list of action attributes.
-#'
-#' @family syntax actions
+#' @family syntax
 #'
 #' @export
-action <- function(IDENTIFIER,
-                   needs = NULL,
-                   uses,
-                   runs = NULL,
-                   args = NULL,
-                   env = NULL,
-                   secrets = NULL) {
-  # this might become an S3 constructor helper at some point (hence the name), but OO seems unecessary for now.
-  # input validation ====
-  # all of this is as per the gh action spec https://developer.github.com/actions/creating-workflows/workflow-configuration-options/
-  checkmate::assert_string(
-    x = IDENTIFIER,
-    null.ok = FALSE
-  )
+job <- function(id,
+                name = NULL,
+                needs = NULL,
+                `runs-on` = "ubuntu-18.04",
+                steps = NULL,
+                timeout_minutes = NULL,
+                strategy = NULL,
+                container = NULL,
+                services = NULL) {
+  checkmate::assert_string(x = id, na.ok = FALSE)
+  checkmate::assert_string(x = name, na.ok = FALSE, null.ok = TRUE)
   checkmate::assert_character(
     x = needs,
-    any.missing = FALSE,
-    unique = TRUE,  # cannot have two identical dependencies
-    null.ok = TRUE
-  )
-  checkmate::assert_string(
-    x = uses,
-    null.ok = FALSE
-    # we don't run extra checks here; that's a job for the ghaction parser
-  )
-  checkmate::assert_character(
-    x = runs,
-    any.missing = FALSE,
-    unique = FALSE,
-    null.ok = TRUE
-  )
-  checkmate::assert_character(
-    x = args,
-    any.missing = FALSE,
-    unique = FALSE,
-    null.ok = TRUE
-  )
-  checkmate::assert_list(
-    x = env,
-    types = "character",
-    # TODO env can only be scalars, not sure whether anything else is possible
-    any.missing = FALSE,
-    names = "named",
-    null.ok = TRUE
-  )
-  checkmate::assert_character(
-    x = secrets,
     any.missing = FALSE,
     unique = TRUE,
     null.ok = TRUE
   )
-  # match.call would be somewhat shorter, but might mess up order and requires eval call
-  list(
-    IDENTIFIER = IDENTIFIER,
-    needs = needs,
-    uses = uses,
-    runs = runs,
-    args = args,
-    env = env,
-    secrets = secrets
+  checkmate::assert_choice(
+    x = `runs-on`,
+    choices = ghactions_vms,
+    null.ok = FALSE
   )
+  checkmate::assert_list(
+    x = steps,
+    null.ok = TRUE,
+    names = "unnamed"
+  )
+  checkmate::assert_scalar(
+    x = timeout_minutes,
+    na.ok = FALSE,
+    null.ok = TRUE
+  )
+  checkmate::assert_list(
+    x = strategy,
+    any.missing = FALSE,
+    names = "unique",
+    null.ok = TRUE
+  )
+  if (is.character(container)) {
+    checkmate::assert_string(x = container, na.ok = FALSE, null.ok = TRUE)
+  } else {
+    checkmate::assert_list(
+      x = container,
+      any.missing = FALSE,
+      null.ok = TRUE,
+      names = "unique"
+    )
+  }
+  checkmate::assert_list(
+    x = services,
+    any.missing = FALSE,
+    null.ok = TRUE,
+    names = "unique"
+  )
+
+  res <- as.list(environment())
+  res$id <- NULL  # that's the name of the list, not *in* the list
+  res <- purrr::compact(res)
+  rlang::set_names(x = list(res), nm = id)
 }
 
 
-#' @describeIn action Convert action to HCL
+#' Create nested list for the [strategy](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobsjob_idstrategy) field in [job()]
 #'
-#' @inherit make_template
+#' @param matrix `[list(list(c()))]`
+#' giving the values for each variable for the matrix build.
+#' See [gh_matrix()] for additional options.
+#' Defaults to `NULL`.
+#'
+#' @param fail-fast `[logical()]`
+#' giving whether GitHub should cancel all in-progress jobs if any matrix job fails.
+#' Defaults to `NULL`.
+#'
+#' @param max-parallel `[integer(1)]`
+#' giving the maximum number of jobs to run simultaneously when using a matrix job strategy.
+#'
+#' @family syntax
 #'
 #' @export
-action2hcl <- function(l) {
-  make_template(
-    l = list(
-      IDENTIFIER = l$IDENTIFIER,
-      # some parts of above HCL are just JSON arrays, so we can just use that
-      # below function, sadly, will *not* include linebreaks, so long vectors may not be easily readable
-      # but they are valid json
-      needs = toTOML(l$needs),
-      uses = l$uses,
-      runs = toTOML(l$runs),
-      args = toTOML(l$args),
-      env = toTOML(l$env),
-      secrets = toTOML(l$secrets)
-    ),
-    template = "action"
+strategy <- function(matrix = NULL, `fail-fast` = NULL, `max-parallel` = NULL) {
+  checkmate::assert_list(
+    x = matrix,
+    types = "atomicvector",
+    any.missing = FALSE,
+    names = "unique",
+    null.ok = TRUE
   )
+  checkmate::assert_flag(
+    x = `fail-fast`,
+    na.ok = FALSE,
+    null.ok = TRUE
+  )
+  checkmate::assert_scalar(
+    x = `max-parallel`,
+    na.ok = FALSE,
+    null.ok = TRUE
+  )
+
+  purrr::compact(as.list(environment()))
 }
 
 
-#' @describeIn action Construct corresponding `docker run` command for an action.
-#' @inherit make_template
-
-#' @inheritDotParams processx::run -command -args
+#' Create nested list for the [matrix](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobsjob_idstrategy) field in [strategy()]
 #'
-#' @inherit processx::run return
-action2docker <- function(l, ...) {
-  # prep runtime
-  assert_sysdep("docker")
-  volumes <- NULL
-  if (is_docker() & !(is_github_actions())) {
-    # when we're in docker, we don't need a daemon, we can just use the socket of the parent
-    # except on github actions, which disallows passing on the socket
-    volumes <- c(
-      volumes,
-      "--volume",
-      "/var/run/docker.sock:/var/run/docker.sock"
-    )
-  } else if (!(is_github_actions())) {
-    # weirdly, `is_dockerd()` fails inside GitHub actions
-    # but the docker calls still work, unclear why/how
-    # maybe github actually *does* pass on the socket already
-    if (!is_dockerd()) {
-      stop("Docker daemon does not seem to be running.")
-    }
-  }
-
-  # prepare environment variables
-  envs <- NULL
-  if (!is.null(l$env)) {
-    envs <- c(envs, rbind("--env", paste0(names(l$env), "=", l$env)))
-  }
-  if (!is.null(l$secrets)) {
-    # secrets are propagated as per https://docs.docker.com/engine/reference/run/#env-environment-variables
-    envs <- c(envs, rbind("--env ", l$secrets))
-  }
-
-  # we're NOT using IDENTIFIER as a container name because that just leads to thorny naming conflicts
-  message("Running action: ", l$IDENTIFIER, " ...")
-
-  processx::run(
-    command = "docker",
-    args = c(
-      "run",
-      volumes,
-      envs,
-      l$uses,
-      l$runs,
-      l$args
-    ),
-    echo_cmd = TRUE,
-    echo = TRUE,
-    ...
+#' @param ... `[character()]`
+#' giving values for variable for the matrix build.
+#'
+#' @param exclude,include `[list(list(character(1)))]`
+#' giving unnamed lists of combinations of variables to ex- or include.
+#' Defaults to `NULL`.
+#'
+#' @export
+#'
+#' @family syntax
+gh_matrix <- function(..., exclude = NULL, include = NULL) {
+  checkmate::assert_list(
+    x = exclude,
+    types = "character",
+    any.missing = FALSE,
+    names = "unnamed",
+    null.ok = TRUE
   )
+
+  purrr::compact(c(list(...), as.list(environment())))
 }
 
 
-# Conversion workers ====
+#' Create nested list for the [container](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobsjob_idcontainer) field in [job()]
+#'
+#' @param image `[character(1)]`
+#' giving the published docker image to use as the container to run the action.
+#'
 
-#' Fill in template
+#' @param env `[list()]`
+#' giving environment variables for the container as a *named* list.
+#' Defaults to `NULL`.
 #'
-#' @param l `[list()]`
-#' giving the named list of HCL fields as returned by [action()] and [workflow()].
+#' @param ports,volumes `[list()]`
+#' giving ports to expose, and volumes for the container to use as an *unnamed* list.
+#' Defaults to `NULL`.
 #'
-#' @param template `[character(1)]`
-#' giving the name of the template file.
+#' @param options `[character()]`
+#' giving additional options.
+#' Defaults to `NULL`.
 #'
-#' @return `[character()]`
-#' of class [glue::glue], giving the syntax for one workflow or action block.
+#' @family syntax
 #'
-#' @keywords internal
-make_template <- function(l, template) {
-  # find path to template, which changes depending on compilation vs source
-  # TODO might use usethis::render_template() here, but that is not exported
-  path <- system.file("templates", template, package = "ghactions")
-  template <- readr::read_file(file = path)
-  res <- whisker::whisker.render(
-    template = template,
-    data = l
+#' @export
+container <- function(image,
+                      env = NULL,
+                      ports = NULL,
+                      volumes = NULL,
+                      options = NULL) {
+  checkmate::assert_string(x = image, na.ok = FALSE)
+  checkmate::assert_list(
+    x = env,
+    types = "atomicvector",
+    any.missing = FALSE,
+    names = "unique",
+    null.ok = TRUE
   )
-  glue::as_glue(res)
+  purrr::walk(
+    .x = list(ports, volumes),
+    .f = checkmate::assert_list,
+    any.missing = FALSE,
+    null.ok = TRUE,
+    names = "unnamed"
+  )
+  checkmate::assert_character(x = options, null.ok = TRUE)
+
+  purrr::compact(as.list(environment()))
 }
 
 
-#' Serialise objects into TOMLish
+#' @title Virtual machines [available](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobsjob_idruns-on) on GitHub Actions
 #'
-#' @param x `[list()]` or `[character()]`
-#' giving the objects to be converted to TOML.
-#' Named lists become name = value pairs.
-#' Vectors (named or unnamed) become comma-separated arrays
+#' @family syntax
 #'
-#' @details
-#' Below function *do not do all TOML*, only this specific subset of features.
-#' It would be nice to use an actual r2toml pkg here, but that seems not to exist, as per [this issue](https://github.com/maxheld83/ghactions/issues/13).
+#' @examples
+#' ghactions_vms
 #'
-#' @keywords internal
+#' @export
+ghactions_vms <- c(
+  "ubuntu-latest",
+  "ubuntu-18.04",
+  "ubuntu-16.04",
+  "windows-latest",
+  "windows-2019",
+  "windows-2016",
+  "macOS-latest",
+  "macOS-10.14"
+)
+
+
+# Steps ====
+
+#' Create nested list for *one* [job](https://help.github.com/en/articles/workflow-syntax-for-github-actions#jobs)
 #'
-#' @noRd
-toTOML <- function(x) {
-  res <- glue::double_quote(x)
-  if (is.list(x)) {
-    res <- purrr::imap(.x = res, .f = function(x, y) {
-      glue::glue_collapse(x = c(y, x), sep = " = ")
-    })
-  } else {
-    # below is an ugly hack to avoid trailing comas
-    n_with_comas <- length(res) - 1
-    if (n_with_comas > 0) {
-      res[1:n_with_comas] <- glue::glue('{res[1:n_with_comas]}, ')
-    }
-  }
-  glue::glue_collapse(
-    x = res,
-    # ugly hack to fix indentation in resulting file
-    sep = "\n    "
+#' @param id,if,name,uses,shell `[character(1)]`
+#' giving additional options for the step.
+#' Multiline strings are not supported.
+#' Defaults to `NULL`.
+#'
+#' @param run `[character()]`
+#' giving commands to run.
+#' Will be turned into a multiline string.
+#' Defaults to `NULL`.
+#'
+#' @param with,env `[list()]`
+#' giving a named list of additional parameters.
+#' Defaults to `NULL`.
+#'
+#' @param working-directory `[character(1)]`
+#' giving the default working directory.
+#' Defaults to `NULL`.
+#'
+#' @param continue-on-error `[logical(1)]`
+#' giving whether to allow a job to pass when this step fails.
+#' Defaults to `NULL`.
+#'
+#' @param timeout-minutes `[integer(1)]`
+#' giving the maximum number of minutes to run the step before killing the process.
+#' Defaults to `NULL`.
+#'
+#' @family syntax
+#'
+#' @export
+step <- function(name = NULL,
+                 id = NULL,
+                 `if` = NULL,
+                 uses = NULL,
+                 run = NULL,
+                 shell = NULL,
+                 with = NULL,
+                 env = NULL,
+                 `working-directory` = NULL,
+                 `continue-on-error` = NULL,
+                 `timeout-minutes` = NULL) {
+  purrr::walk(
+    .x = list(id, `if`, name, uses, shell, `working-directory`),
+    .f = checkmate::assert_string,
+    na.ok = FALSE,
+    null.ok = TRUE
   )
+  checkmate::assert_character(x = run, any.missing = FALSE, null.ok = TRUE)
+  purrr::walk(
+    .x = list(with, env),
+    .f = checkmate::assert_list,
+    any.missing = FALSE,
+    null.ok = TRUE,
+    names = "unique"
+  )
+  checkmate::assert_flag(x = `continue-on-error`, na.ok = FALSE, null.ok = TRUE)
+  checkmate::assert_scalar(x = `timeout-minutes`, na.ok = FALSE, null.ok = TRUE)
+
+  # linebreaks for run
+  run <- glue::glue_collapse(x = run, sep = "\n", last = "\n")
+
+  purrr::compact(as.list(environment()))
 }

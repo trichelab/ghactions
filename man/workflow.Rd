@@ -2,46 +2,44 @@
 % Please edit documentation in R/syntax.R
 \name{workflow}
 \alias{workflow}
-\alias{workflow2hcl}
-\title{Create GitHub Actions syntax for \emph{one workflow}.}
+\title{Create nested list for a \href{https://help.github.com/en/articles/workflow-syntax-for-github-actions}{workflow block}}
 \usage{
-workflow(IDENTIFIER, on = "push", resolves)
-
-workflow2hcl(l)
+workflow(name = NULL, on = "push", jobs = NULL)
 }
 \arguments{
-\item{IDENTIFIER}{\code{[character(1)]}
-giving the name of the workflow block.}
+\item{name}{\verb{[character(1)]}
+giving the \href{https://help.github.com/en/articles/workflow-syntax-for-github-actions#name}{name} of the workflow.
+Defaults to \code{NULL}, for no name, in which case GitHub will use the file name.}
 
-\item{on}{\code{[character(1)]}
-giving the \href{https://developer.github.com/webhooks/#events}{GitHub Event} on which to trigger the workflow.
-Must be one of \link{ghactions_events}.
-Defaults to \code{"push"}, in which case the workflow is triggered on every push event.}
+\item{on}{\verb{[character()]}
+giving the \href{https://help.github.com/en/articles/events-that-trigger-workflows}{GitHub Event} on which to trigger the workflow.
+Must be a subset of \link{ghactions_events}.
+Defaults to \code{"push"}, in which case the workflow is triggered on every push event.
+Can also be a named list as returned by \code{\link[=on]{on()}} for additional filters.}
 
-\item{resolves}{\code{[character()]}
-giving the action(s) to resolve}
-
-\item{l}{\code{[list()]}
-giving the named list of HCL fields as returned by \code{\link[=action]{action()}} and \code{\link[=workflow]{workflow()}}.}
-}
-\value{
-\code{[list()]}
-A list as specified in the \code{workflow} argument to \code{\link[=use_ghactions]{use_ghactions()}}.
+\item{jobs}{\verb{[list()]}
+giving a \emph{named} list of jobs, with each list element as returned by \code{\link[=job]{job()}}.}
 }
 \description{
-Create GitHub Actions syntax for \emph{one workflow}.
+Create nested list for a \href{https://help.github.com/en/articles/workflow-syntax-for-github-actions}{workflow block}
 }
-\section{Functions}{
-\itemize{
-\item \code{workflow2hcl}: Convert workflow block to HCL
-}}
-
 \examples{
 workflow(
-  IDENTIFIER = "Run calculation",
+  name = "Render",
   on = "push",
-  resolves = "Simple Addition"
+  jobs = NULL
 )
 
 }
-\concept{syntax workflows}
+\seealso{
+Other syntax: 
+\code{\link{container}()},
+\code{\link{gh_matrix}()},
+\code{\link{ghactions_events}},
+\code{\link{ghactions_vms}},
+\code{\link{job}()},
+\code{\link{on}()},
+\code{\link{step}()},
+\code{\link{strategy}()}
+}
+\concept{syntax}
